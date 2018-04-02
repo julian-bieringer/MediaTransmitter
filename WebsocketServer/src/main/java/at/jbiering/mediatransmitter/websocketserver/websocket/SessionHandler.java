@@ -8,13 +8,16 @@ import java.util.Set;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import javax.json.JsonArrayBuilder;
 import javax.json.JsonObject;
+import javax.json.JsonObjectBuilder;
 import javax.json.spi.JsonProvider;
 import javax.websocket.Session;
 
 import org.slf4j.Logger;
 
 import at.jbiering.mediatransmitter.websocketserver.model.Device;
+import at.jbiering.mediatransmitter.websocketserver.websocket.enums.Action;
 
 @ApplicationScoped
 public class SessionHandler {
@@ -86,16 +89,8 @@ public class SessionHandler {
     }
 
     private JsonObject createAddMessage(Device device) {
-        JsonProvider provider = JsonProvider.provider();
-        JsonObject addMessage = provider.createObjectBuilder()
-        		.add("action", "add")
-                .add("id", device.getId())
-                .add("name", device.getName())
-                .add("type", device.getType())
-                .add("status", device.getStatus())
-                .add("description", device.getDescription())
-                .build();
-        return addMessage;
+    	JsonObject deviceMessage = createDeviceJsonObjectWithStatus(device, Action.ADD);
+        return deviceMessage;
     }
 
     private void sendToAllConnectedSessions(JsonObject message) {
@@ -119,6 +114,64 @@ public class SessionHandler {
 				return device;
 		}
 		return null;
+	}
+
+	public void sendSubscribersList(Session session, int id) {
+		Device device = findDeviceById(id);
+		
+		if(device != null) {
+			//grab data from all other devices
+			JsonProvider provider = JsonProvider.provider();
+			JsonObject otherDevicesList = assembleOtherDevicesList(provider, device);
+			//send json list of other devices to session which requested them
+			sendToSession(session, otherDevicesList);
+		}
+		
+	}
+
+	private JsonObject assembleOtherDevicesList(JsonProvider provider, Device requestingDevice) {
+		JsonArrayBuilder deviceArray = provider.createArrayBuilder();
+		JsonObjectBuilder uberObjectBuilder = provider.createObjectBuilder();
+		
+		for(Device device : devices) {
+			if(!(device.getId() == requestingDevice.getId())) {
+				//other device than asking device so add to list
+				deviceArray.add(createDeviceJsonObjectWithoutAction(device));
+			}
+		}
+		
+		JsonObject websocketMessage = uberObjectBuilder
+				.add("action", Action.RETRIEVE_SUBSCRIBERS.toString())
+				.add("subscribers", deviceArray.build())
+				.build();
+		
+		return websocketMessage;
+	}
+	
+	private JsonObject createDeviceJsonObjectWithoutAction(Device device) {
+		JsonObject deviceMessage = createDeviceJsonObjectBuilderWithoutAction(device).build();
+		return deviceMessage;
+	}
+	
+	private JsonObject createDeviceJsonObjectWithStatus(Device device, Action action) {
+		JsonObjectBuilder deviceMessageBuilder = createDeviceJsonObjectBuilderWithoutAction(device);
+        JsonObject deviceMessage = deviceMessageBuilder
+        	   .add("action", action.toString().toLowerCase())
+               .build();
+		return deviceMessage;
+	}
+	
+	private JsonObjectBuilder createDeviceJsonObjectBuilderWithoutAction(Device device) {
+		 JsonProvider provider = JsonProvider.provider();
+         JsonObjectBuilder deviceMessageBuilder = provider.createObjectBuilder()
+                .add("id", device.getId())
+                .add("name", device.getName())
+                .add("type", device.getType())
+                .add("status", device.getStatus())
+                .add("modelDescription", device.getModelDescription())
+                .add("osType", device.getOsType())
+                .add("osVersion", device.getOsVersion());
+		return deviceMessageBuilder;
 	}
 	
 }
