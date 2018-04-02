@@ -15,6 +15,7 @@
   </properties>
   
   <dependencies>
+ 	<!-- production dependencies -->
  	<dependency>
 	    <groupId>javax.websocket</groupId>
 	    <artifactId>javax.websocket-api</artifactId>
@@ -38,6 +39,31 @@
 	    <artifactId>logback-classic</artifactId>
 	    <version>1.1.7</version>
 	    <scope>compile</scope>
+	</dependency>
+	<!-- junit dependencies -->
+	<dependency>
+	    <groupId>junit</groupId>
+	    <artifactId>junit</artifactId>
+	    <version>4.12</version>
+	    <scope>test</scope>
+	</dependency>
+    <dependency>
+        <groupId>org.glassfish.tyrus</groupId>
+        <artifactId>tyrus-client</artifactId>
+        <version>1.1</version>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.glassfish.tyrus</groupId>
+        <artifactId>tyrus-container-grizzly</artifactId>
+        <version>1.1</version>
+        <scope>test</scope>
+    </dependency> 
+    <dependency>
+		<groupId>org.glassfish</groupId>
+		<artifactId>javax.json</artifactId>
+		<version>1.0.4</version>
+		<scope>test</scope>
 	</dependency>
   </dependencies>
   
