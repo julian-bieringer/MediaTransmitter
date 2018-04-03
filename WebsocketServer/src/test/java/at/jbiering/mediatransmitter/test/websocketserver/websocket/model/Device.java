@@ -1,4 +1,4 @@
-package at.jbiering.mediatransmitter.websocketserver.websocket.model;
+package at.jbiering.mediatransmitter.test.websocketserver.websocket.model;
 
 public class Device {
 	

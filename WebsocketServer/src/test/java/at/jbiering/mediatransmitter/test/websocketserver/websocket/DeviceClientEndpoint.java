@@ -1,4 +1,4 @@
-package at.jbiering.mediatransmitter.websocketserver.websocket;
+package at.jbiering.mediatransmitter.test.websocketserver.websocket;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -16,8 +16,9 @@ import javax.websocket.OnMessage;
 import javax.websocket.OnOpen;
 import javax.websocket.Session;
 
-import at.jbiering.mediatransmitter.websocketserver.websocket.enums.Action;
-import at.jbiering.mediatransmitter.websocketserver.websocket.model.Device;
+import at.jbiering.mediatransmitter.test.websocketserver.websocket.model.Device;
+import at.jbiering.mediatransmitter.test.websocketserver.websocket.model.MediaFile;
+import at.jbiering.mediatransmitter.websocketserver.model.enums.Action;
 
 @ClientEndpoint
 public class DeviceClientEndpoint {
@@ -26,6 +27,7 @@ public class DeviceClientEndpoint {
 	private Session session;
 	private Device[] devices;
 	private String deviceName;
+	private MediaFile mediaFile;
 	
     public DeviceClientEndpoint(String deviceName) {
 		this.deviceName = deviceName;
@@ -44,6 +46,7 @@ public class DeviceClientEndpoint {
 	@OnOpen
     public void onOpen(Session session) {
     	this.session = session;
+
         try {
         	String action = "add";
             String name = deviceName;
@@ -81,25 +84,36 @@ public class DeviceClientEndpoint {
 		}
     }
 
-    @OnMessage
+    //set message limit to 100 megabyte
+    @OnMessage(maxMessageSize = 100 * 1024 * 1024)
     public void processMessage(String message) {
-        System.out.println("Received message in client: " + message);
-        
+
         try (JsonReader reader = Json.createReader(new StringReader(message))){
 			JsonObject jsonMessage = reader.readObject();
 			String actionString = jsonMessage.getString("action");
 			Action action = Enum.valueOf(Action.class, actionString.toUpperCase());
 			
+	        System.out.println("*** Received message in client with action [" + action.toString() + "] ***");
+			
 			if(action.equals(Action.ADD)) {
 				this.currentDevice = extractDeviceInfoFromJsonObject(jsonMessage);
 			} else if(action.equals(Action.RETRIEVE_SUBSCRIBERS)) {
 				updateSubscriberArray(jsonMessage);
+			} else if(action.equals(Action.RETRIEVE_FILE)) {
+				this.mediaFile = retrieveByteArray(jsonMessage);
 			}
         }
     	WebsocketServerTests.messageLatch.countDown();
     }
 
-    private void updateSubscriberArray(JsonObject jsonMessage) {
+    private MediaFile retrieveByteArray(JsonObject jsonMessage) {
+		String bytesBase64 = jsonMessage.getString("bytes_base64");
+		String fileName = jsonMessage.getString("file_name");
+		String fileExtension = jsonMessage.getString("file_extension");
+		return new MediaFile(bytesBase64, fileExtension, fileName);
+	}
+
+	private void updateSubscriberArray(JsonObject jsonMessage) {
     	JsonArray subscribers = jsonMessage.getJsonArray("subscribers");
     	
     	this.devices = new Device[subscribers.size()];
@@ -134,6 +148,14 @@ public class DeviceClientEndpoint {
 
 	public void setCurrentDevice(Device currentDevice) {
 		this.currentDevice = currentDevice;
+	}
+
+	public MediaFile getMediaFile() {
+		return mediaFile;
+	}
+
+	public void setMediaFile(MediaFile mediaFile) {
+		this.mediaFile = mediaFile;
 	}
 
 	public void closeConnection() {
