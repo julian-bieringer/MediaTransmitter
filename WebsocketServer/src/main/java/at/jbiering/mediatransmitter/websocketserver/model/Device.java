@@ -9,6 +9,7 @@ public class Device {
     private String modelDescription;
     private String osType;
     private String osVersion;
+    private String sessionId;
 
     public Device() {
     }
@@ -21,6 +22,14 @@ public class Device {
 		this.modelDescription = modelDescription;
 		this.osType = osType;
 		this.osVersion = osVersion;
+	}
+	
+	public String getSessionId() {
+		return sessionId;
+	}
+
+	public void setSessionId(String sessionId) {
+		this.sessionId = sessionId;
 	}
 
 	public long getId() {
@@ -77,5 +86,11 @@ public class Device {
 
 	public void setOsVersion(String osVersion) {
 		this.osVersion = osVersion;
+	}
+
+	@Override
+	public String toString() {
+		return String.format("{id:%d, name:%s, type:%s, status:%s, modelDescription:%s, osType:%s, osVersion: %s}", 
+				this.id, this.name, this.type, this.status, this.modelDescription, this.osType, this.osVersion);
 	}
 }

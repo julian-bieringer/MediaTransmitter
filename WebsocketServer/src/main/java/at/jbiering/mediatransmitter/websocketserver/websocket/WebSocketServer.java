@@ -1,6 +1,8 @@
 package at.jbiering.mediatransmitter.websocketserver.websocket;
 
+import java.io.PrintWriter;
 import java.io.StringReader;
+import java.io.StringWriter;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
@@ -42,7 +44,12 @@ public class WebSocketServer {
 	
 	@OnError
 	public void onError(Throwable error) {
-		logger.warn("*** Error with websocket connection ***: " + error.getCause().getMessage());
+		StringWriter sw = new StringWriter();
+		PrintWriter pw = new PrintWriter(sw);
+		error.printStackTrace(pw);
+		String stackTraceString = sw.toString();
+		
+		logger.warn("*** Error with websocket connection ***: " + stackTraceString);
 	}	
 	
 	@OnMessage
@@ -58,9 +65,7 @@ public class WebSocketServer {
 			
 			if(Action.ADD.equals(action)) {
 				Device device = createDeviceFromJsonObject(jsonMessage);
-				logger.info("*** created new device ***");
-				sessionHandler.addDevice(device);
-				logger.info("*** added device to session handler ***");
+				sessionHandler.addDevice(device, session);
 			} else if(Action.REMOVE.equals(action)) {
 				int id = (int) jsonMessage.getInt("id");
 				sessionHandler.removeDevice(id);

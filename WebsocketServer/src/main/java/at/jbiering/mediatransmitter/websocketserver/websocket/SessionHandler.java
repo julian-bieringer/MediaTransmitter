@@ -31,11 +31,6 @@ public class SessionHandler {
 	
 	public void addSession(Session session) {
 		sessions.add(session);
-		
-		for(Device device : devices) {
-			JsonObject addMessage = createAddMessage(device);
-			sendToSession(session, addMessage);
-		}
 	}
 	
 	public void removeSession(Session session) {
@@ -46,28 +41,58 @@ public class SessionHandler {
 		return new ArrayList<>(devices);
 	}
 	
-	public void addDevice(Device device) {
+	public void addDevice(Device device, Session session) {
+		//add new device and send only him his server information
 		device.setId(deviceId);
+		device.setSessionId(session.getId());
 		deviceId++;
 		JsonObject addMessage = createAddMessage(device);
-		sendToAllConnectedSessions(addMessage);
+		sendToSession(session, addMessage);
+		
+		//cannot use send to all connected sessions method because caller session
+		//does not need to update his subscriber list
+		
+		JsonObject updateRequiredMessage = createSubscriberUpdateRequestedMessage();
+		
+		for(Session curr : sessions) {
+			if(!(curr.getId().equals(session.getId()))) {
+				sendToSession(curr, updateRequiredMessage);
+			}
+		}
+		
 		this.devices.add(device);
 	}
 	
+	private JsonObject createSubscriberUpdateRequestedMessage() {
+		JsonProvider provider = JsonProvider.provider();
+		JsonObject object = provider.createObjectBuilder()
+				.add("action", "subscriber_list_update_required")
+				.build();
+		return object;
+	}
+
 	public void removeDevice(int id) {
 		Device device = findDeviceById(id);
 		if(device != null) {
 			devices.remove(device);
+			Session session = findSessionById(device.getSessionId());
 			
-			JsonProvider provider = JsonProvider.provider();
-			JsonObject removeMessage = provider.createObjectBuilder()
-					.add("action", "remove")
-					.add("id", id)
-					.build();
-			sendToAllConnectedSessions(removeMessage);
+			if(session != null) {
+				this.sessions.remove(session);
+			}
+			
+			sendToAllConnectedSessions(createSubscriberUpdateRequestedMessage());
 		}
 	}
 	
+	private Session findSessionById(String sessionId) {
+		for(Session session : sessions) {
+			if(session.getId().equals(sessionId))
+				return session;
+		}
+		return null;
+	}
+
 	public void toggleDevice(int id) {
 		JsonProvider provider = JsonProvider.provider();
 		Device device = findDeviceById(id);
@@ -100,6 +125,7 @@ public class SessionHandler {
 
     private void sendToSession(Session session, JsonObject message) {
     	try {
+    		logger.info("Sending following message to client with session id [" + session.getId() + "]: " + message.toString());
 			session.getBasicRemote().sendText(message.toString());
 		} catch (IOException e) {
 			sessions.remove(session);
@@ -141,7 +167,7 @@ public class SessionHandler {
 		}
 		
 		JsonObject websocketMessage = uberObjectBuilder
-				.add("action", Action.RETRIEVE_SUBSCRIBERS.toString())
+				.add("action", Action.RETRIEVE_SUBSCRIBERS.toString().toLowerCase())
 				.add("subscribers", deviceArray.build())
 				.build();
 		
