@@ -1,26 +1,52 @@
 package at.jbiering.mediatransmitter.websocketserver.websocket;
 
 import java.io.IOException;
+import java.io.StringReader;
 
+import javax.json.Json;
+import javax.json.JsonArray;
 import javax.json.JsonObject;
+import javax.json.JsonReader;
+import javax.json.JsonValue;
 import javax.json.spi.JsonProvider;
 import javax.websocket.ClientEndpoint;
+import javax.websocket.OnClose;
 import javax.websocket.OnError;
 import javax.websocket.OnMessage;
 import javax.websocket.OnOpen;
 import javax.websocket.Session;
 
+import at.jbiering.mediatransmitter.websocketserver.websocket.enums.Action;
+import at.jbiering.mediatransmitter.websocketserver.websocket.model.Device;
+
 @ClientEndpoint
 public class DeviceClientEndpoint {
-	
+		
+	private Device currentDevice;
 	private Session session;
+	private Device[] devices;
+	private String deviceName;
 	
-    @OnOpen
+    public DeviceClientEndpoint(String deviceName) {
+		this.deviceName = deviceName;
+	}
+
+	public Device[] getDevices() {
+    	Device[] copyDevices = new Device[devices.length];
+		System.arraycopy(devices, 0, copyDevices, 0, devices.length);
+		return copyDevices;
+	}
+
+	public void setDevices(Device[] devices) {
+		this.devices = devices;
+	}
+
+	@OnOpen
     public void onOpen(Session session) {
     	this.session = session;
         try {
         	String action = "add";
-            String name = "jbiering";
+            String name = deviceName;
             String type = "Medion";
             String modelDescription = "X5520";
             String osType = "Android";
@@ -40,20 +66,81 @@ public class DeviceClientEndpoint {
         } catch (IOException ex) {
         }
     }
-
-    @OnMessage
-    public void processMessage(String message) {
-        System.out.println("Received message in client: " + message);
-        WebsocketServerTests.messageLatch.countDown();
-        try {
-			session.close();
+	
+	@OnClose
+	public void onClose() {
+		this.session = null;
+		System.out.println("connection closed");
+	}
+    
+    public void sendMessage(JsonObject message) {
+    	try {
+			session.getBasicRemote().sendText(message.toString());
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
     }
 
-    @OnError
+    @OnMessage
+    public void processMessage(String message) {
+        System.out.println("Received message in client: " + message);
+        
+        try (JsonReader reader = Json.createReader(new StringReader(message))){
+			JsonObject jsonMessage = reader.readObject();
+			String actionString = jsonMessage.getString("action");
+			Action action = Enum.valueOf(Action.class, actionString.toUpperCase());
+			
+			if(action.equals(Action.ADD)) {
+				this.currentDevice = extractDeviceInfoFromJsonObject(jsonMessage);
+			} else if(action.equals(Action.RETRIEVE_SUBSCRIBERS)) {
+				updateSubscriberArray(jsonMessage);
+			}
+        }
+    	WebsocketServerTests.messageLatch.countDown();
+    }
+
+    private void updateSubscriberArray(JsonObject jsonMessage) {
+    	JsonArray subscribers = jsonMessage.getJsonArray("subscribers");
+    	
+    	this.devices = new Device[subscribers.size()];
+    	int index = 0;
+		
+		for(JsonValue subscriber : subscribers) {
+			JsonObject subscriberObject = (JsonObject) subscriber;
+			this.devices[index] = extractDeviceInfoFromJsonObject(subscriberObject);
+			index++;
+		}
+	}
+    
+    private Device extractDeviceInfoFromJsonObject(JsonObject jsonObject) {
+    	long id = jsonObject.getInt("id");
+    	String name = jsonObject.getString("name");
+    	String status = jsonObject.getString("status");
+		String modelDescription = jsonObject.getString("modelDescription");
+		String type = jsonObject.getString("type");
+		String osType = jsonObject.getString("osType");
+		String osVersion = jsonObject.getString("osVersion");
+		return new Device(id, name, status, type, modelDescription, osType, osVersion);
+    }
+
+	@OnError
     public void processError(Throwable t) {
         t.printStackTrace();
     }
+
+	public Device getCurrentDevice() {
+		return currentDevice;
+	}
+
+	public void setCurrentDevice(Device currentDevice) {
+		this.currentDevice = currentDevice;
+	}
+
+	public void closeConnection() {
+		try {
+			this.session.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
 }
