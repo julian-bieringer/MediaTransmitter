@@ -17,7 +17,8 @@ import javax.websocket.Session;
 import org.slf4j.Logger;
 
 import at.jbiering.mediatransmitter.websocketserver.model.Device;
-import at.jbiering.mediatransmitter.websocketserver.websocket.enums.Action;
+import at.jbiering.mediatransmitter.websocketserver.model.MediaFile;
+import at.jbiering.mediatransmitter.websocketserver.model.enums.Action;
 
 @ApplicationScoped
 public class SessionHandler {
@@ -34,7 +35,9 @@ public class SessionHandler {
 	}
 	
 	public void removeSession(Session session) {
-		sessions.remove(session);
+		Session setSession = findSessionBySessionId(session.getId());
+		if(setSession != null)
+			sessions.remove(setSession);
 	}
 	
 	public List<Device> getDevices(){
@@ -53,13 +56,9 @@ public class SessionHandler {
 		//does not need to update his subscriber list
 		
 		JsonObject updateRequiredMessage = createSubscriberUpdateRequestedMessage();
-		
-		for(Session curr : sessions) {
-			if(!(curr.getId().equals(session.getId()))) {
-				sendToSession(curr, updateRequiredMessage);
-			}
-		}
-		
+
+		sendToEverySessionButCurrent(updateRequiredMessage, session.getId());
+
 		this.devices.add(device);
 	}
 	
@@ -71,21 +70,25 @@ public class SessionHandler {
 		return object;
 	}
 
-	public void removeDevice(int id) {
-		Device device = findDeviceById(id);
-		if(device != null) {
-			devices.remove(device);
-			Session session = findSessionById(device.getSessionId());
-			
-			if(session != null) {
-				this.sessions.remove(session);
+	public void removeDevice(Session session) {
+		if(session != null) {
+			Device device = findDeviceBySessionId(session.getId());
+			if(device != null) {
+				devices.remove(device);
+				sendToEverySessionButCurrent(createSubscriberUpdateRequestedMessage(), session.getId());
 			}
-			
-			sendToAllConnectedSessions(createSubscriberUpdateRequestedMessage());
 		}
 	}
 	
-	private Session findSessionById(String sessionId) {
+	private void sendToEverySessionButCurrent(JsonObject message, String currentSessionId) {
+		for(Session curr : sessions) {
+			if(!(curr.getId().equals(currentSessionId))) {
+				sendToSession(curr, message);
+			}
+		}
+	}
+	
+	private Session findSessionBySessionId(String sessionId) {
 		for(Session session : sessions) {
 			if(session.getId().equals(sessionId))
 				return session;
@@ -93,9 +96,9 @@ public class SessionHandler {
 		return null;
 	}
 
-	public void toggleDevice(int id) {
+	public void toggleDevice(Session session) {
 		JsonProvider provider = JsonProvider.provider();
-		Device device = findDeviceById(id);
+		Device device = findDeviceBySessionId(session.getId());
 		
 		if(device != null) {
 			if(device.getStatus().toLowerCase().equals("on")) {
@@ -125,25 +128,34 @@ public class SessionHandler {
 
     private void sendToSession(Session session, JsonObject message) {
     	try {
-    		logger.info("Sending following message to client with session id [" + session.getId() + "]: " + message.toString());
+    		logger.info("*** Sending message with action [" + message.getString("action") + "] to client with session id [" + session.getId() + "] ***");
+    		logger.info("*** sending " + message.toString().length() + " bytes with max buffer size of " + session.getMaxTextMessageBufferSize() + " bytes ***");
 			session.getBasicRemote().sendText(message.toString());
+			logger.info("*** Sending finished ***");
 		} catch (IOException e) {
-			sessions.remove(session);
-			logger.error("Sending message to session #" + session.getId() + " failed with message:" + message);
+			//session is no longer active so remove session and according device
+			Session setSession = findSessionBySessionId(session.getId());
+			sessions.remove(setSession);
+			
+			Device device = findDeviceBySessionId(session.getId());
+			if(device != null)
+				this.devices.remove(device);
+			
+			logger.error("*** Sending message with action [" + message.getString("action") + "] to client with session id [" + session.getId() + "] failed ***");
 		}
     }
 	
 	
-	private Device findDeviceById(int id) {
+	private Device findDeviceBySessionId(String sessionId) {
 		for(Device device : devices) {
-			if(device.getId() == id)
+			if(device.getSessionId().equals(sessionId))
 				return device;
 		}
 		return null;
 	}
 
-	public void sendSubscribersList(Session session, int id) {
-		Device device = findDeviceById(id);
+	public void sendSubscribersList(Session session) {
+		Device device = findDeviceBySessionId(session.getId());
 		
 		if(device != null) {
 			//grab data from all other devices
@@ -198,6 +210,29 @@ public class SessionHandler {
                 .add("osType", device.getOsType())
                 .add("osVersion", device.getOsVersion());
 		return deviceMessageBuilder;
+	}
+
+	public void sendByteArray(long recipientId, MediaFile mediaFile) {
+		Session recipientSession = findSessionByDeviceId(recipientId);
+		
+		JsonProvider provider = JsonProvider.provider();
+		JsonObject message = provider.createObjectBuilder()
+				.add("bytes_base64", mediaFile.getBytesBase64())
+				.add("file_name", mediaFile.getFileName())
+				.add("file_extension", mediaFile.getFileExtension())
+				.add("action", Action.RETRIEVE_FILE.toString().toLowerCase())
+				.build();
+		
+		sendToSession(recipientSession, message);
+	}
+	
+	private Session findSessionByDeviceId(long deviceId) {
+		for(Device device : devices) {
+			if(device.getId() == deviceId) {
+				return findSessionBySessionId(device.getSessionId());
+			}
+		}
+		return null;
 	}
 	
 }

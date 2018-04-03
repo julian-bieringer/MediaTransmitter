@@ -19,7 +19,8 @@ import javax.websocket.server.ServerEndpoint;
 import org.slf4j.Logger;
 
 import at.jbiering.mediatransmitter.websocketserver.model.Device;
-import at.jbiering.mediatransmitter.websocketserver.websocket.enums.Action;
+import at.jbiering.mediatransmitter.websocketserver.model.MediaFile;
+import at.jbiering.mediatransmitter.websocketserver.model.enums.Action;
 
 @ApplicationScoped
 @ServerEndpoint("/websocket")
@@ -52,31 +53,36 @@ public class WebSocketServer {
 		logger.warn("*** Error with websocket connection ***: " + stackTraceString);
 	}	
 	
-	@OnMessage
+	@OnMessage(maxMessageSize = 100 * 1024 * 1024)
 	public void handleMessage(String message, Session session) {
-		logger.info("*** Got incoming message from device ***: " + message);
-		
 		try (JsonReader reader = Json.createReader(new StringReader(message))){
 			JsonObject jsonMessage = reader.readObject();
 			String actionString = jsonMessage.getString("action");
 			Action action = Enum.valueOf(Action.class, actionString.toUpperCase());
 			
-			logger.info("*** Chosen action is ***: " + action.toString());
+			logger.info("*** Got incoming message with action ***: " + action.toString());
 			
 			if(Action.ADD.equals(action)) {
 				Device device = createDeviceFromJsonObject(jsonMessage);
 				sessionHandler.addDevice(device, session);
 			} else if(Action.REMOVE.equals(action)) {
-				int id = (int) jsonMessage.getInt("id");
-				sessionHandler.removeDevice(id);
+				sessionHandler.removeDevice(session);
 			} else if (Action.TOGGLE.equals(action)) {
-				int id = (int) jsonMessage.getInt("id");
-				sessionHandler.toggleDevice(id);
+				sessionHandler.toggleDevice(session);
 			} else if (Action.RETRIEVE_SUBSCRIBERS.equals(action)) {
-				int id = (int) jsonMessage.getInt("id");
-				sessionHandler.sendSubscribersList(session, id);
+				sessionHandler.sendSubscribersList(session);
+			} else if (Action.SEND_FILE.equals(action)) {
+				long recipientId = jsonMessage.getInt("recipient_id");
+				sessionHandler.sendByteArray(recipientId, retrieveMediaFile(jsonMessage));
 			}
 		}
+	}
+	
+    private MediaFile retrieveMediaFile(JsonObject jsonMessage) {
+		String bytesBase64 = jsonMessage.getString("bytes_base64");
+		String fileName = jsonMessage.getString("file_name");
+		String fileExtension = jsonMessage.getString("file_extension");
+		return new MediaFile(bytesBase64, fileExtension, fileName);
 	}
 	
 	private Device createDeviceFromJsonObject(JsonObject msg) {
