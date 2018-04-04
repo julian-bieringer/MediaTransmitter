@@ -36,8 +36,11 @@ public class WebsocketServerTests {
         container.connectToServer(client, URI.create(uri));
 		WebsocketServerTests.messageLatch.await(5, TimeUnit.SECONDS);
         assertEquals(0, WebsocketServerTests.messageLatch.getCount());
+        
+        WebsocketServerTests.messageLatch = new CountDownLatch(1);
         client.sendMessage(createCloseMessage());
-        client.closeConnection();
+		WebsocketServerTests.messageLatch.await(5, TimeUnit.SECONDS);
+        assertEquals(0, WebsocketServerTests.messageLatch.getCount());
 	}
 	
 	@Test
@@ -61,9 +64,11 @@ public class WebsocketServerTests {
 		
 		Device[] devices = client.getDevices();
 		
+        WebsocketServerTests.messageLatch = new CountDownLatch(1);
 		assertEquals(0, devices.length);
         client.sendMessage(createCloseMessage());
-        client.closeConnection();
+		WebsocketServerTests.messageLatch.await(5, TimeUnit.SECONDS);
+        assertEquals(0, WebsocketServerTests.messageLatch.getCount());
 	}
 	
 	@Test
@@ -103,9 +108,8 @@ public class WebsocketServerTests {
 		
 		//Client 1 disconnects
 		//CountDownLatch is 1 as client 2 should receive and "subscriber_list_update_required" message
-        WebsocketServerTests.messageLatch = new CountDownLatch(1);
+        WebsocketServerTests.messageLatch = new CountDownLatch(2);
         client1.sendMessage(createCloseMessage());
-        client1.closeConnection();
         
     	WebsocketServerTests.messageLatch.await(5, TimeUnit.SECONDS);
         assertEquals(0, WebsocketServerTests.messageLatch.getCount());
@@ -124,8 +128,10 @@ public class WebsocketServerTests {
 		assertEquals(0, devices.length);
         
         //Client 2 disconnects
+		WebsocketServerTests.messageLatch = new CountDownLatch(1);
         client2.sendMessage(createCloseMessage());
-        client2.closeConnection();
+		WebsocketServerTests.messageLatch.await(5, TimeUnit.SECONDS);
+        assertEquals(0, WebsocketServerTests.messageLatch.getCount());
 	}
 	
 	@Test
@@ -185,9 +191,8 @@ public class WebsocketServerTests {
 		
 		//Client 1 disconnects
 		//CountDownLatch is 1 as client 2 should receive and "subscriber_list_update_required" message
-        WebsocketServerTests.messageLatch = new CountDownLatch(1);
+        WebsocketServerTests.messageLatch = new CountDownLatch(2);
         client1.sendMessage(createCloseMessage());
-        client1.closeConnection();
         
     	WebsocketServerTests.messageLatch.await(5, TimeUnit.SECONDS);
         assertEquals(0, WebsocketServerTests.messageLatch.getCount());
@@ -206,8 +211,10 @@ public class WebsocketServerTests {
 		assertEquals(0, devices.length);
         
         //Client 2 disconnects
+		WebsocketServerTests.messageLatch = new CountDownLatch(1);
         client2.sendMessage(createCloseMessage());
-        client2.closeConnection();
+    	WebsocketServerTests.messageLatch.await(5, TimeUnit.SECONDS);
+        assertEquals(0, WebsocketServerTests.messageLatch.getCount());
 	}
 	
 	private byte[] convertFileToByteArray(String folderName, String imageName, String fileExtension) {

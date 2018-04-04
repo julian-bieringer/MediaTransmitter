@@ -1,5 +1,6 @@
 package at.jbiering.mediatransmitter.websocketserver.websocket;
 
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -39,8 +40,8 @@ public class WebSocketServer {
 	
 	@OnClose
 	public void close(Session session) {
-		logger.info("*** Websocket connection closed ***");
 		sessionHandler.removeSession(session);
+		logger.info("*** Websocket connection closed ***");
 	}
 	
 	@OnError
@@ -51,6 +52,12 @@ public class WebSocketServer {
 		String stackTraceString = sw.toString();
 		
 		logger.warn("*** Error with websocket connection ***: " + stackTraceString);
+		
+		for(Device device : sessionHandler.getDevices())
+			logger.info(" Device still in session handlers list: " + device.toString());
+		
+		for(Session session : sessionHandler.getSessions())
+			logger.info(" Session still in session handlers list: " + session.getId());
 	}	
 	
 	@OnMessage(maxMessageSize = 100 * 1024 * 1024)
@@ -67,6 +74,7 @@ public class WebSocketServer {
 				sessionHandler.addDevice(device, session);
 			} else if(Action.REMOVE.equals(action)) {
 				sessionHandler.removeDevice(session);
+				session.close();
 			} else if (Action.TOGGLE.equals(action)) {
 				sessionHandler.toggleDevice(session);
 			} else if (Action.RETRIEVE_SUBSCRIBERS.equals(action)) {
@@ -75,6 +83,8 @@ public class WebSocketServer {
 				long recipientId = jsonMessage.getInt("recipient_id");
 				sessionHandler.sendByteArray(recipientId, retrieveMediaFile(jsonMessage));
 			}
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 	

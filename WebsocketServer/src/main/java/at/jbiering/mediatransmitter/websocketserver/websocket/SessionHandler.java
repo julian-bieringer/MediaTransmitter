@@ -35,6 +35,7 @@ public class SessionHandler {
 	}
 	
 	public void removeSession(Session session) {
+		logger.info("*** removing session now ***");
 		Session setSession = findSessionBySessionId(session.getId());
 		if(setSession != null)
 			sessions.remove(setSession);
@@ -44,6 +45,10 @@ public class SessionHandler {
 		return new ArrayList<>(devices);
 	}
 	
+	public List<Session> getSessions() {
+		return new ArrayList<>(sessions);
+	}
+
 	public void addDevice(Device device, Session session) {
 		//add new device and send only him his server information
 		device.setId(deviceId);
@@ -79,7 +84,7 @@ public class SessionHandler {
 			}
 		}
 	}
-	
+
 	private void sendToEverySessionButCurrent(JsonObject message, String currentSessionId) {
 		for(Session curr : sessions) {
 			if(!(curr.getId().equals(currentSessionId))) {

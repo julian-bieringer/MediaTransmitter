@@ -74,6 +74,7 @@ public class DeviceClientEndpoint {
 	public void onClose() {
 		this.session = null;
 		System.out.println("connection closed");
+    	WebsocketServerTests.messageLatch.countDown();
 	}
     
     public void sendMessage(JsonObject message) {
@@ -156,13 +157,5 @@ public class DeviceClientEndpoint {
 
 	public void setMediaFile(MediaFile mediaFile) {
 		this.mediaFile = mediaFile;
-	}
-
-	public void closeConnection() {
-		try {
-			this.session.close();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 	}
 }
