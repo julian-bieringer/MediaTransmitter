@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="at.jbiering.mediatransmitter">
 
+    <uses-permission android:name="android.permission.INTERNET"></uses-permission>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -19,9 +21,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".ServerPreferenceActivity"
+        <activity android:name=".preferences.TransmitterPreferenceActivity"
             android:label="@string/manifest_server_preferences_activity_label">
         </activity>
+        <service
+            android:name="at.jbiering.mediatransmitter.websocket.WebSocketService"
+            android:enabled="true">
+        </service>
     </application>
 
 </manifest>
