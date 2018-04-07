@@ -1,9 +1,12 @@
 <resources>
     <string name="app_name">MediaTransmitter</string>
     <string name="action_settings">Settings</string>
-    <string name="fragment_server_preferences_server_category">Server</string>
-    <string name="fragment_server_preferences_edit_text_server_ip">Server IP</string>
     <string name="preference_headers_server_preference_fragment">open preferences</string>
     <string name="manifest_server_preferences_activity_label">preferences</string>
-    <string name="fragment_server_preferences_edit_text_websocket_context_path">Websocket Context Path</string>
+    <string name="fragment_transmitter_preferences_server_category">Server</string>
+    <string name="fragment_transmitter_preferences_edit_text_server_ip">Server IP</string>
+    <string name="fragment_transmitter_preferences_edit_text_websocket_context_path">Websocket Context Path</string>
+    <string name="fragment_transmitter_preferences_edit_text_server_port">Server Port</string>
+    <string name="fragment_transmitter_preferences_user_category">User</string>
+    <string name="fragment_transmitter_preferences_edit_text_user_name">User Name</string>
 </resources>
