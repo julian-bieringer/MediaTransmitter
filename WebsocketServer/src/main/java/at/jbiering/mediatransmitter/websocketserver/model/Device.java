@@ -3,6 +3,7 @@ package at.jbiering.mediatransmitter.websocketserver.model;
 public class Device {
 	
 	private long id;
+	private String ip;
     private String name;
     private String status;
     private String type;
@@ -14,7 +15,7 @@ public class Device {
     public Device() {
     }
 
-	public Device(String name, String status, String type, String modelDescription, String osType, String osVersion) {
+	public Device(String name, String status, String type, String modelDescription, String osType, String osVersion, String ip) {
 		super();
 		this.name = name;
 		this.status = status;
@@ -22,6 +23,7 @@ public class Device {
 		this.modelDescription = modelDescription;
 		this.osType = osType;
 		this.osVersion = osVersion;
+		this.ip = ip;
 	}
 	
 	public String getSessionId() {
@@ -88,9 +90,17 @@ public class Device {
 		this.osVersion = osVersion;
 	}
 
+	public String getIp() {
+		return ip;
+	}
+
+	public void setIp(String ip) {
+		this.ip = ip;
+	}
+
 	@Override
 	public String toString() {
-		return String.format("{id:%d, name:%s, type:%s, status:%s, modelDescription:%s, osType:%s, osVersion: %s}", 
-				this.id, this.name, this.type, this.status, this.modelDescription, this.osType, this.osVersion);
+		return String.format("{id:%d, name:%s, type:%s, status:%s, modelDescription:%s, osType:%s, osVersion: %s, ip: %s}", 
+				this.id, this.name, this.type, this.status, this.modelDescription, this.osType, this.osVersion, this.ip);
 	}
 }

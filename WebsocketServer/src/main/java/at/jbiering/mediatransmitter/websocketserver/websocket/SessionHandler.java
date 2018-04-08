@@ -37,6 +37,15 @@ public class SessionHandler {
 	public void removeSession(Session session) {
 		logger.info("*** removing session now ***");
 		Session setSession = findSessionBySessionId(session.getId());
+		
+		Device device = findDeviceBySessionId(session.getId());
+		if(device != null) {
+			//something went wrong as device is still there -> remove message has been omitted
+			//-> probably client crashed or closed connection abruptly -> remove device
+			removeDevice(session);
+		}
+		
+		//device removed -> can now safely remove session
 		if(setSession != null)
 			sessions.remove(setSession);
 	}
@@ -208,6 +217,7 @@ public class SessionHandler {
 		 JsonProvider provider = JsonProvider.provider();
          JsonObjectBuilder deviceMessageBuilder = provider.createObjectBuilder()
                 .add("id", device.getId())
+                .add("ip", device.getIp())
                 .add("name", device.getName())
                 .add("type", device.getType())
                 .add("status", device.getStatus())

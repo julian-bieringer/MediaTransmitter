@@ -62,6 +62,9 @@ public class WebSocketServer {
 	
 	@OnMessage(maxMessageSize = 100 * 1024 * 1024)
 	public void handleMessage(String message, Session session) {
+		
+		logCurrentDeviceSessionState();
+		
 		try (JsonReader reader = Json.createReader(new StringReader(message))){
 			JsonObject jsonMessage = reader.readObject();
 			String actionString = jsonMessage.getString("action");
@@ -88,7 +91,25 @@ public class WebSocketServer {
 		}
 	}
 	
-    private MediaFile retrieveMediaFile(JsonObject jsonMessage) {
+    private void logCurrentDeviceSessionState() {
+    	logger.info("                                                              ");
+    	logger.info("************        current devices in session handler        ************");
+		
+    	for(Device device : sessionHandler.getDevices()) {
+    		logger.info(device.toString());
+    	}
+    	
+    	logger.info("************        current sessions in session handler       ************");
+    	
+    	for(Session session : sessionHandler.getSessions()) {
+    		logger.info("{sessionId: " + session.getId() + ", opened: " + session.isOpen() + "}");
+    	}
+    	
+    	logger.info("************            end of session handler info           ************ ");
+    	logger.info("                                                              ");
+	}
+
+	private MediaFile retrieveMediaFile(JsonObject jsonMessage) {
 		String bytesBase64 = jsonMessage.getString("bytes_base64");
 		String fileName = jsonMessage.getString("file_name");
 		String fileExtension = jsonMessage.getString("file_extension");
@@ -102,6 +123,7 @@ public class WebSocketServer {
 		String status = "on";
 		String osType = msg.getString("osType");
 		String osVersion = msg.getString("osVersion");
-		return new Device(name, status, type, modelDescription, osType, osVersion);
+		String ip = msg.getString("ip");
+		return new Device(name, status, type, modelDescription, osType, osVersion, ip);
 	}
 }
