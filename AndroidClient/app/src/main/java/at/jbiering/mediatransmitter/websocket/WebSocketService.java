@@ -23,8 +23,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 import at.jbiering.mediatransmitter.model.Device;
@@ -44,7 +46,8 @@ public class WebSocketService extends Service {
     public final IBinder binder = new WebSocketBinder();
     private WebSocket webSocket;
     private String userName;
-    private Device device;
+    private Device currentDevice;
+    private HashSet<Device> activeDevices;
     private CountDownLatch latch;
 
     //if internet goes down, stop websocket connection
@@ -78,7 +81,8 @@ public class WebSocketService extends Service {
                         new Thread(new Runnable() {
                             @Override
                             public void run() {
-                                handleMessage(websocket, text);
+                                MessageHelper.handleMessage(websocket, text, activeDevices,
+                                        currentDevice, getApplicationContext());
                             }
                         }).start();
                     }
@@ -118,33 +122,8 @@ public class WebSocketService extends Service {
         }
     }
 
-    private void handleMessage(WebSocket websocket, String text) {
-        try {
-            JSONObject reader = new JSONObject(text);
-            String actionString = reader.getString("action");
-            Action action = Enum.valueOf(Action.class, actionString.toUpperCase());
-
-            Log.i(LOG_TAG, "ws: received message with action [" + actionString + "]");
-
-            if(action.equals(Action.ADD)){
-                //device was registered by server, can now save the device with id
-                this.device = extractDeviceInfoFromJsonObject(reader);
-            }
-
-        }catch (JSONException ex){
-
-        }
-    }
-
-    private Device extractDeviceInfoFromJsonObject(JSONObject jsonObject) throws JSONException {
-        long id = jsonObject.getInt("id");
-        String name = jsonObject.getString("name");
-        String status = jsonObject.getString("status");
-        String modelDescription = jsonObject.getString("modelDescription");
-        String type = jsonObject.getString("type");
-        String osType = jsonObject.getString("osType");
-        String osVersion = jsonObject.getString("osVersion");
-        return new Device(id, name, status, type, modelDescription, osType, osVersion);
+    public void refreshWebsocketServerSubscribers(){
+        this.webSocket.sendText(MessageHelper.createJsonRetrieveSubscriberMessage());
     }
 
     private String readUserNameFromSharedPreferences() {
