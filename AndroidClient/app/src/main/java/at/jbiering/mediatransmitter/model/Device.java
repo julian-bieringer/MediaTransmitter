@@ -1,8 +1,12 @@
 package at.jbiering.mediatransmitter.model;
 
-public class Device {
+import android.os.Parcel;
+import android.os.Parcelable;
+
+public class Device implements Parcelable{
 
     private long id;
+    private String ip;
     private String name;
     private String status;
     private String type;
@@ -10,15 +14,59 @@ public class Device {
     private String osType;
     private String osVersion;
 
-    public Device(long id, String name, String status, String type, String modelDescription, String osType,
-                  String osVersion) {
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel parcel, int i) {
+        parcel.writeLong(id);
+        parcel.writeString(ip);
+        parcel.writeString(name);
+        parcel.writeString(status);
+        parcel.writeString(type);
+        parcel.writeString(modelDescription);
+        parcel.writeString(osType);
+        parcel.writeString(osVersion);
+    }
+
+    public static final Parcelable.Creator CREATOR = new Parcelable.Creator() {
+        public Device createFromParcel(Parcel in) {
+            long id = in.readLong();
+            String ip = in.readString();
+            String name = in.readString();
+            String status = in.readString();
+            String type = in.readString();
+            String modelDescription = in.readString();
+            String osType = in.readString();
+            String osVersion = in.readString();
+
+            return new Device(id, ip, name, status, type, modelDescription, osType, osVersion);
+        }
+
+        public Device[] newArray(int size) {
+            return new Device[size];
+        }
+    };
+
+    public Device(long id, String ip, String name, String status, String type, String modelDescription, String osType, String osVersion) {
         this.id = id;
+        this.ip = ip;
         this.name = name;
         this.status = status;
         this.type = type;
         this.modelDescription = modelDescription;
         this.osType = osType;
         this.osVersion = osVersion;
+    }
+
+    public String getIp() {
+        return ip;
+    }
+
+    public void setIp(String ip) {
+        this.ip = ip;
     }
 
     public long getId() {
