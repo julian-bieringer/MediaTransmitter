@@ -25,6 +25,7 @@ public class BaseWebSocketActivity extends AppCompatActivity {
             WebSocketService.WebSocketBinder binder =
                     (WebSocketService.WebSocketBinder) serviceBinder;
             webSocketService = binder.getService();
+            onWebsocketServiceBounded();
         }
 
         @Override
@@ -33,6 +34,19 @@ public class BaseWebSocketActivity extends AppCompatActivity {
             webSocketService = null;
         }
     };
+
+    protected void onWebsocketServiceBounded() {
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+    }
 
     @Override
     protected void onStart() {
