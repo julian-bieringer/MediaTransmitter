@@ -100,19 +100,10 @@ public class DeviceClientEndpoint {
 				this.currentDevice = extractDeviceInfoFromJsonObject(jsonMessage);
 			} else if(action.equals(Action.RETRIEVE_SUBSCRIBERS)) {
 				updateSubscriberArray(jsonMessage);
-			} else if(action.equals(Action.RETRIEVE_FILE)) {
-				this.mediaFile = retrieveByteArray(jsonMessage);
 			}
         }
     	WebsocketServerTests.messageLatch.countDown();
     }
-
-    private MediaFile retrieveByteArray(JsonObject jsonMessage) {
-		String bytesBase64 = jsonMessage.getString("bytes_base64");
-		String fileName = jsonMessage.getString("file_name");
-		String fileExtension = jsonMessage.getString("file_extension");
-		return new MediaFile(bytesBase64, fileExtension, fileName);
-	}
 
 	private void updateSubscriberArray(JsonObject jsonMessage) {
     	JsonArray subscribers = jsonMessage.getJsonArray("subscribers");
