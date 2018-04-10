@@ -2,8 +2,10 @@ package at.jbiering.mediatransmitter.websocketserver.websocket;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.enterprise.context.ApplicationScoped;
@@ -17,7 +19,7 @@ import javax.websocket.Session;
 import org.slf4j.Logger;
 
 import at.jbiering.mediatransmitter.websocketserver.model.Device;
-import at.jbiering.mediatransmitter.websocketserver.model.MediaFile;
+import at.jbiering.mediatransmitter.websocketserver.model.FileConversation;
 import at.jbiering.mediatransmitter.websocketserver.model.enums.Action;
 
 @ApplicationScoped
@@ -28,6 +30,7 @@ public class SessionHandler {
 	
 	private final Set<Session> sessions = new HashSet<>();
 	private final Set<Device> devices = new HashSet<>();
+	private Map<String, FileConversation> openFileConversations;
 	private long deviceId = 1;
 	
 	public void addSession(Session session) {
@@ -226,20 +229,6 @@ public class SessionHandler {
                 .add("osVersion", device.getOsVersion());
 		return deviceMessageBuilder;
 	}
-
-	public void sendByteArray(long recipientId, MediaFile mediaFile) {
-		Session recipientSession = findSessionByDeviceId(recipientId);
-		
-		JsonProvider provider = JsonProvider.provider();
-		JsonObject message = provider.createObjectBuilder()
-				.add("bytes_base64", mediaFile.getBytesBase64())
-				.add("file_name", mediaFile.getFileName())
-				.add("file_extension", mediaFile.getFileExtension())
-				.add("action", Action.RETRIEVE_FILE.toString().toLowerCase())
-				.build();
-		
-		sendToSession(recipientSession, message);
-	}
 	
 	private Session findSessionByDeviceId(long deviceId) {
 		for(Device device : devices) {
@@ -248,6 +237,95 @@ public class SessionHandler {
 			}
 		}
 		return null;
+	}
+
+	public void sendCreateFileMessage(JsonObject jsonMessage, Session session) {
+		long recipientId = readRecipientIdFromJsonObject(jsonMessage);
+		long senderId = findDeviceBySessionId(session.getId()).getId();
+		String transferUuid = jsonMessage.getString("transfer_uuid");
+		
+		if(openFileConversations == null)
+			openFileConversations = new HashMap<>();
+		
+		openFileConversations.put(transferUuid, new FileConversation(senderId, recipientId));
+		
+		 JsonProvider provider = JsonProvider.provider();
+         JsonObject createFileMessage = provider.createObjectBuilder()
+                .add("action", Action.CREATE_FILE.toString().toLowerCase())
+                .add("file_extension", jsonMessage.getString("file_extension"))
+                .add("file_parts", jsonMessage.getInt("file_parts"))
+                .add("transfer_uuid", jsonMessage.getString("transfer_uuid"))
+                .build();
+  
+		
+		Session recipientSession = findSessionByDeviceId(recipientId);
+		if(recipientSession != null)
+			sendToSession(recipientSession, createFileMessage);
+	}
+
+	public void sendFilePartMessage(JsonObject jsonMessage) {
+		String fileTransferUuid = jsonMessage.getString("transfer_uuid");
+		FileConversation fileConversation = openFileConversations.get(fileTransferUuid);
+		long recipientId = fileConversation.getRecipientDeviceId();
+		
+		JsonProvider provider = JsonProvider.provider();
+		JsonObject retrieveFileMessage = provider
+				.createObjectBuilder()
+				.add("action", Action.RETRIEVE_FILE_PART.toString().toLowerCase())
+				.add("index", jsonMessage.getInt("index"))
+				.add("transfer_uuid", fileTransferUuid)
+				.add("bytes_base64", jsonMessage.getString("bytes_base64"))
+				.build();
+		
+		Session recipientSession = findSessionByDeviceId(recipientId);
+		if(recipientSession != null)
+			sendToSession(recipientSession, retrieveFileMessage);
+	}
+	
+	private long readRecipientIdFromJsonObject(JsonObject jsonObject) {
+		long recipientId = jsonObject.getInt("recipient_id");
+		return recipientId;
+	}
+
+	public void sendReceivedFileMessage(JsonObject jsonMessage) {
+		FileConversation fileConversation = findFileConversationByTransferUuidInJsonObject(jsonMessage);
+		
+		Session recipientSession = findSessionByDeviceId(fileConversation.getSenderDeviceId());
+		if(recipientSession != null)
+			sendToSession(recipientSession, jsonMessage);
+	}
+
+	public void sendEndFileRequestMessage(JsonObject jsonMessage) {
+		FileConversation fileConversation = findFileConversationByTransferUuidInJsonObject(jsonMessage);
+		
+		Session recipientSession = findSessionByDeviceId(fileConversation.getRecipientDeviceId());
+		if(recipientSession != null)
+			sendToSession(recipientSession, jsonMessage);
+	}
+
+	public void sendEndFileErrorOrAcknowledgedMessage(JsonObject jsonMessage) {
+		String fileTransferUuid = jsonMessage.getString("transfer_uuid");
+		FileConversation fileConversation = openFileConversations.get(fileTransferUuid);
+		
+		Session recipientSession = findSessionByDeviceId(fileConversation.getSenderDeviceId());
+		if(recipientSession != null)
+			sendToSession(recipientSession, jsonMessage);
+		
+		openFileConversations.remove(fileTransferUuid);
+	}
+	
+	private FileConversation findFileConversationByTransferUuidInJsonObject(JsonObject jsonMessage) {
+		String fileTransferUuid = jsonMessage.getString("transfer_uuid");
+		FileConversation fileConversation = openFileConversations.get(fileTransferUuid);
+		return fileConversation;
+	}
+
+	public void sendCreateFileAcknowledgedMessage(JsonObject jsonMessage) {
+		FileConversation fileConversation = findFileConversationByTransferUuidInJsonObject(jsonMessage);
+		
+		Session recipientSession = findSessionByDeviceId(fileConversation.getSenderDeviceId());
+		if(recipientSession != null)
+			sendToSession(recipientSession, jsonMessage);
 	}
 	
 }
