@@ -2,37 +2,54 @@ package at.jbiering.mediatransmitter.websocket;
 
 import android.content.Context;
 import android.content.Intent;
-import android.net.wifi.WifiManager;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Build;
-import android.os.Parcelable;
-import android.text.format.Formatter;
+import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 
 import com.neovisionaries.ws.client.WebSocket;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.math.BigInteger;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Set;
+import java.util.Map;
 
 import at.jbiering.mediatransmitter.files.FileHelper;
 import at.jbiering.mediatransmitter.model.Device;
-import at.jbiering.mediatransmitter.model.MediaFile;
+import at.jbiering.mediatransmitter.model.OpenFile;
+import at.jbiering.mediatransmitter.model.OpenTransmission;
 import at.jbiering.mediatransmitter.model.enums.Action;
-
-import static android.content.Context.WIFI_SERVICE;
 
 public class MessageHelper {
 
     private final static String LOG_TAG = MessageHelper.class.getSimpleName();
+
+    //set file part size to 1kb
+    private static final int FILE_PART_SIZE = 1024;
+
+    //map for file sender with uri, recipient id and md5 checksum
+    private static Map<String, OpenTransmission> openTransmissions;
+
+    //map for file receiver with path to file
+    private static Map<String, OpenFile> openFiles;
 
     public static String createJsonAddMessage(String userName){
 
@@ -59,17 +76,17 @@ public class MessageHelper {
         return addMessage.toString();
     }
 
-    public static void extractAndSaveFile(JSONObject reader, Context applicationContext) {
+    public static String createJsonTextMessage(String text){
+        JSONObject addMessage = new JSONObject();
         try {
-            String bytesBase64 = reader.getString("bytes_base64");
-            byte[] bytes = Base64.decode(bytesBase64, Base64.DEFAULT);
-            String fileName = reader.getString("file_name");
-            String fileExtension = reader.getString("file_extension");
-            MediaFile mediaFile = new MediaFile(bytes, fileName, fileExtension);
-            FileHelper.writeToInternalStorage(mediaFile, applicationContext);
+            addMessage.put("action", Action.SEND_CHAT_MESSAGE.toString().toLowerCase());
+            addMessage.put("text_message", text);
         } catch (JSONException e) {
             e.printStackTrace();
         }
+
+        Log.i(LOG_TAG, "ws is sending: " + addMessage.toString());
+        return addMessage.toString();
     }
 
     public static void handleMessage(WebSocket websocket, String text,
@@ -95,12 +112,221 @@ public class MessageHelper {
                 websocket.sendText(retrieveMessage);
             } else if (action.equals(Action.RETRIEVE_SUBSCRIBERS)){
                 MessageHelper.retrieveActiveDevices(reader, activeDevices, applicationContext);
-            } else if (action.equals(Action.RETRIEVE_FILE)){
-                MessageHelper.extractAndSaveFile(reader, applicationContext);
+            } else if(action.equals(Action.CREATE_FILE_ACKNOWLEDGED)){
+                MessageHelper.sendFileParts(reader, websocket, applicationContext);
+            } else if(action.equals(Action.FILE_RECEIVED)){
+                MessageHelper.sendEndFileMessage(reader, websocket);
+            } else if(action.equals(Action.END_FILE_ACKNOWLEDGED)){
+                OpenTransmission openTransmission = MessageHelper.removeOpenTransmission(reader);
+                MessageHelper.broadcastFileAcknowledged(openTransmission, applicationContext);
+                openTransmissions.remove(openTransmission);
+            } else if(action.equals(Action.CREATE_FILE)){
+                MessageHelper.openFile(reader, websocket, applicationContext);
+            } else if(action.equals(Action.RETRIEVE_FILE_PART)){
+                MessageHelper.writeFilePartToFile(reader, applicationContext, websocket);
+            } else if(action.equals((Action.END_FILE_REQUEST))){
+                MessageHelper.checkFileForCorruption(reader, applicationContext, websocket);
             }
         }catch (JSONException ex){
 
         }
+    }
+
+    private static void checkFileForCorruption(JSONObject jsonObject, Context applicationContext,
+                                               WebSocket websocket) {
+        try {
+            String remoteMd5Checksum = jsonObject.getString("md5_checksum");
+            String fileTransferUuid = jsonObject.getString("transfer_uuid");
+            OpenFile openFile = openFiles.get(fileTransferUuid);
+
+            String localMd5checkSum = FileHelper
+                    .calcMd5Checksum(openFile, FILE_PART_SIZE, applicationContext);
+
+            JSONObject endFileMessage = new JSONObject();
+            endFileMessage.put("transfer_uuid", fileTransferUuid);
+
+            if(remoteMd5Checksum.equals(localMd5checkSum)){
+                endFileMessage
+                        .put("action", Action.END_FILE_ACKNOWLEDGED.toString().toLowerCase());
+            } else {
+                endFileMessage
+                        .put("action", Action.END_FILE_ERROR.toString().toLowerCase());
+            }
+
+            websocket.sendText(endFileMessage.toString());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void writeFilePartToFile(JSONObject jsonObject, Context applicationContext,
+                                            WebSocket webSocket) {
+        try {
+            String fileTransferUuid = jsonObject.getString("transfer_uuid");
+            int index = jsonObject.getInt("index");
+            byte[] bytes = Base64
+                    .decode(jsonObject.getString("bytes_base64"), Base64.DEFAULT);
+            OpenFile openFile = openFiles.get(fileTransferUuid);
+
+            synchronized (MessageHelper.class) {
+
+                FileHelper
+                        .appendToFile(openFile, index, bytes, FILE_PART_SIZE, applicationContext);
+
+                if (fileFullyReceived(openFile)) {
+                    FileHelper.createOrderedFileFromTmpFile(applicationContext, FILE_PART_SIZE,
+                            openFile);
+                    try {
+                        JSONObject createFileReceivedMessage = new JSONObject();
+                        createFileReceivedMessage.put("action",
+                                Action.FILE_RECEIVED.toString().toLowerCase());
+                        createFileReceivedMessage.put("transfer_uuid", fileTransferUuid);
+
+                        webSocket.sendText(createFileReceivedMessage.toString());
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static boolean fileFullyReceived(OpenFile openFile) {
+
+        boolean[] partsReceived = openFile.getFilePartsReceived();
+
+        for (int i = 0; i < partsReceived.length; i++) {
+            if(!partsReceived[i])
+                return false;
+        }
+        return true;
+    }
+
+    private static void openFile(JSONObject jsonObject, WebSocket webSocket,
+                                 Context applicationContext) {
+        try {
+            String fileTransferUuid = jsonObject.getString("transfer_uuid");
+            String fileExtension = jsonObject.getString("file_extension");
+            int fileParts = jsonObject.getInt("file_parts");
+            String filePath = FileHelper
+                    .createFileInInternalStorage(fileExtension, fileParts, FILE_PART_SIZE,
+                            applicationContext);
+
+            if(filePath != null){
+                try {
+                    JSONObject createFileAcknowledgeMessage = new JSONObject();
+                    createFileAcknowledgeMessage.put("action",
+                            Action.CREATE_FILE_ACKNOWLEDGED.toString().toLowerCase());
+                    createFileAcknowledgeMessage.put("transfer_uuid", fileTransferUuid);
+
+                    webSocket.sendText(createFileAcknowledgeMessage.toString());
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if(openFiles == null)
+                openFiles = new HashMap<>();
+
+            OpenFile openFile = new OpenFile(filePath, fileParts,
+                    new boolean[fileParts], new int[fileParts]);
+            openFiles.put(fileTransferUuid, openFile);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static OpenTransmission removeOpenTransmission(JSONObject jsonObject) {
+        try {
+            String fileTransferUuid = jsonObject.getString("transfer_uuid");
+            OpenTransmission openTransmission = openTransmissions.get(fileTransferUuid);
+            return openTransmission;
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private static void broadcastFileAcknowledged(OpenTransmission openTransmission,
+                                                  Context applicationContext) {
+        Intent broadcastIntent = new Intent();
+        broadcastIntent.setAction(WebsocketBroadcastKeys.broadcastEndFileAcknowledgedAction);
+        broadcastIntent
+                .putExtra("transmission", openTransmission);
+        applicationContext.sendBroadcast(broadcastIntent);
+    }
+
+    private static void sendEndFileMessage(JSONObject jsonObject, WebSocket websocket) {
+        try {
+            String fileTransferUuid = jsonObject.getString("transfer_uuid");
+            OpenTransmission openTransmission = openTransmissions.get(fileTransferUuid);
+
+            JSONObject endFileMessage = new JSONObject();
+            endFileMessage.put("action", Action.END_FILE_REQUEST.toString().toLowerCase());
+            endFileMessage.put("md5_checksum", openTransmission.getMd5Checksum());
+            endFileMessage.put("transfer_uuid", fileTransferUuid);
+
+            websocket.sendText(endFileMessage.toString());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void sendFileParts(JSONObject jsonObject, WebSocket webSocket,
+                                      Context applicationContext) {
+        try {
+            String fileTransferUuid = jsonObject.getString("transfer_uuid");
+            OpenTransmission openTransmission = openTransmissions.get(fileTransferUuid);
+
+            InputStream inputStream = null;
+            inputStream = applicationContext
+                    .getContentResolver()
+                    .openInputStream(openTransmission.getUri());
+
+            int bufferSize = FILE_PART_SIZE;
+            byte[] buffer = new byte[bufferSize];
+
+            int index = 0;
+
+            MessageDigest md5Digest = DigestUtils.getMd5Digest();
+
+            while((inputStream.read(buffer)) != -1){
+                md5Digest.update(buffer);
+                sendFilePart(buffer, index, fileTransferUuid, webSocket);
+                index++;
+            }
+
+            byte[] md5sum = md5Digest.digest();
+            BigInteger bigInt = new BigInteger(1, md5sum);
+            String checkSum = bigInt.toString(16);
+
+            checkSum = String.format("%32s", checkSum).replace(' ', '0');
+            openTransmission.setMd5Checksum(checkSum);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void sendFilePart(byte[] buffer,  int index,
+                                     String fileTransferUuid, WebSocket webSocket) {
+        JSONObject filePartMessage = new JSONObject();
+        try {
+            filePartMessage.put("action", Action.SEND_FILE_PART.toString().toLowerCase());
+            filePartMessage.put("index", index);
+            filePartMessage.put("transfer_uuid", fileTransferUuid);
+            filePartMessage.put("bytes_base64", Base64
+                    .encodeToString(buffer, Base64.DEFAULT));
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        webSocket.sendText(filePartMessage.toString());
     }
 
     public static void retrieveActiveDevices(JSONObject reader, HashSet<Device> activeDevices,
@@ -184,6 +410,42 @@ public class MessageHelper {
         } catch (Exception ex) {
             Log.e("IP Address", ex.toString());
         }
+        return null;
+    }
+
+    public static String createJsonCreateFileMessage(String fileExtension, Uri uri,
+                                                     long recipientId, String fileTransferUuid,
+                                                     Context applicationContext) {
+
+        if(openTransmissions == null)
+            openTransmissions = new HashMap<>();
+
+        OpenTransmission openTransmission = new OpenTransmission(uri, recipientId);
+        openTransmissions.put(fileTransferUuid, openTransmission);
+
+
+        try {
+            InputStream inputStream = applicationContext.getContentResolver().openInputStream(uri);
+            long size = inputStream.available();
+            int fileParts = (int) Math.ceil((((double)size)/FILE_PART_SIZE));
+
+            JSONObject createFileMessage = new JSONObject();
+            createFileMessage.put("action", Action.CREATE_FILE.toString().toLowerCase());
+            createFileMessage.put("recipient_id", recipientId);
+            createFileMessage.put("file_extension", fileExtension);
+            createFileMessage.put("file_parts", fileParts);
+            createFileMessage.put("transfer_uuid", fileTransferUuid);
+
+            Log.i(LOG_TAG, "ws is sending: " + createFileMessage.toString());
+            return createFileMessage.toString();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         return null;
     }
 }

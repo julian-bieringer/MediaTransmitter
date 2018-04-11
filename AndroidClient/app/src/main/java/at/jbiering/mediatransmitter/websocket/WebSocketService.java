@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
@@ -23,13 +24,16 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 import at.jbiering.mediatransmitter.model.Device;
+import at.jbiering.mediatransmitter.model.MediaFile;
 import at.jbiering.mediatransmitter.model.enums.Action;
 import at.jbiering.mediatransmitter.preferences.SharedPreferenceKeys;
 
@@ -73,7 +77,8 @@ public class WebSocketService extends Service {
             WebSocketFactory factory = new WebSocketFactory();
             try {
                 this.webSocket = factory
-                        .createSocket(websocketConnectionUrl, WEBSOCKET_TIMEOUT_MS);
+                        .createSocket(websocketConnectionUrl, WEBSOCKET_TIMEOUT_MS)
+                        .setMaxPayloadSize(100*1024*1024);
                 webSocket.addListener(new WebSocketAdapter() {
 
                     @Override
@@ -226,6 +231,19 @@ public class WebSocketService extends Service {
                 e.printStackTrace();
             }
         }
+    }
+
+    public void sendTextMessage(String text) {
+        String jsonMessage = MessageHelper.createJsonTextMessage(text);
+        webSocket.sendText(jsonMessage);
+    }
+
+    public void sendMediaFile(String fileExtension, Uri uri, long recipientId) {
+        String uuid = UUID.randomUUID().toString();
+        String jsonMessage = MessageHelper
+                .createJsonCreateFileMessage(fileExtension, uri, recipientId, uuid,
+                        getApplicationContext());
+        webSocket.sendText(jsonMessage);
     }
 
     public final class WebSocketBinder extends Binder {
