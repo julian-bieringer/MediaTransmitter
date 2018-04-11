@@ -1,5 +1,7 @@
 package at.jbiering.mediatransmitter;
 
+import android.content.Context;
+import android.content.Intent;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -7,7 +9,6 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import java.util.List;
-import java.util.Set;
 
 import at.jbiering.mediatransmitter.model.Device;
 
@@ -44,11 +45,22 @@ public class RecyclerViewActiveDevicesAdapter
     }
 
     @Override
-    public void onBindViewHolder(ViewHolder holder, int position) {
-        Device device = activeDevices.get(position);
+    public void onBindViewHolder(final ViewHolder holder, int position) {
+        final Device device = activeDevices.get(position);
 
         holder.textViewIp.setText(device.getIp());
         holder.textViewPersonName.setText(device.getName());
+
+        holder.itemView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Context context = view.getContext();
+                //active client has been clicked -> open chat activity
+                Intent intent = new Intent(context, ChatActivity.class);
+                intent.putExtra("device", device);
+                context.startActivity(intent);
+            }
+        });
     }
 
     @Override
